@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Công cụ Giấu tin trong Ảnh (Steganography)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; background-color: #f4f4f9; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    h2 { color: #333; margin-top: 0; }
+    input, textarea, button { width: 100%; margin-top: 10px; padding: 10px; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
+    button { background-color: #007bff; color: white; font-weight: bold; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+    img { max-width: 100%; margin-top: 15px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>1. Mã hóa / Giấu tin vào ảnh</h2>
+    <input type="file" id="uploadEncode" accept="image/*">
+    <textarea id="secretMessage" placeholder="Nhập tin nhắn cần giấu..."></textarea>
+    <button onclick="encodeMessage()">Giấu tin & Tải ảnh về</button>
+    <div id="outputArea"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Giải mã / Đọc tin từ ảnh</h2>
+    <input type="file" id="uploadDecode" accept="image/*">
+    <button onclick="decodeMessage()">Đọc tin ẩn</button>
+    <p><strong>Nội dung giấu:</strong> <span id="decodedResult">...</span></p>
+  </div>
+
+  <script>
+    // Hàm giấu tin (LSB đơn giản)
+    function encodeMessage() {
+      const fileInput = document.getElementById('uploadEncode');
+      const text = document.getElementById('secretMessage').value;
+      if (!fileInput.files[0] || !text) {
+        alert("Vui lòng chọn ảnh và nhập tin nhắn!");
+        return;
+      }
+
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        // Thêm ký tự kết thúc chuỗi (Null terminator)
+        const fullText = text + '\0';
+        let bitIndex = 0;
+
+        for (let i = 0; i < fullText.length; i++) {
+          const charCode = fullText.charCodeAt(i);
+          for (let bit = 7; bit >= 0; bit--) {
+            const bitValue = (charCode >> bit) & 1;
+            // Thay thế bit cuối (LSB) của kênh màu Red/Green/Blue
+            const pixelIndex = Math.floor(bitIndex / 3) * 4 + (bitIndex % 3);
+            data[pixelIndex] = (data[pixelIndex] & 0xFE) | bitValue;
+            bitIndex++;
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+
+        // Tạo đường dẫn tải ảnh PNG đã giấu tin
+        const link = document.createElement('a');
+        link.download = 'encoded_image.png';
+        link.href = canvas.toDataURL('image/png');
+        link.innerText = 'Bấm vào đây để tải ảnh đã giấu tin';
+        
+        const outputArea = document.getElementById('outputArea');
+        outputArea.innerHTML = '';
+        outputArea.appendChild(link);
+      };
+      img.src = URL.createObjectURL(fileInput.files[0]);
+    }
+
+    // Hàm giải mã tin
+    function decodeMessage() {
+      const fileInput = document.getElementById('uploadDecode');
+      if (!fileInput.files[0]) {
+        alert("Vui lòng chọn ảnh cần giải mã!");
+        return;
+      }
+
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        let binaryMsg = "";
+        let decodedText = "";
+        let bitIndex = 0;
+
+        for (let i = 0; i < data.length; i++) {
+          if ((i + 1) % 4 === 0) continue; // Bỏ qua kênh Alpha (A)
+
+          const bit = data[i] & 1;
+          binaryMsg += bit;
+
+          if (binaryMsg.length === 8) {
+            const charCode = parseInt(binaryMsg, 2);
+            if (charCode === 0) break; // Gặp ký tự kết thúc '\0'
+            decodedText += String.fromCharCode(charCode);
+            binaryMsg = "";
+          }
+        }
+
+        document.getElementById('decodedResult').innerText = decodedText || "(Không tìm thấy tin giấu)";
+      };
+      img.src = URL.createObjectURL(fileInput.files[0]);
+    }
+  </script>
+</body>
+</html>
